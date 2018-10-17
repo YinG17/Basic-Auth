@@ -1,13 +1,19 @@
 <?php
 /**
- * Plugin Name: JSON Basic Authentication
- * Description: Basic Authentication handler for the JSON API, used for development and debugging purposes
- * Author: WordPress API Team
- * Author URI: https://github.com/WP-API
+ * Plugin Name: JSON Basic Authentication Hacked By JaeHo Song
+ * Description: Basic Authentication handler for the JSON API which was originally develpoed by Wordpress Team and Hacked by JaeHo Song to add security for production use.
+ * Author: JaeHo Song
+ * Author URI: https://github.com/thruthesky/Basic-Auth
  * Version: 0.1
- * Plugin URI: https://github.com/WP-API/Basic-Auth
+ * Plugin URI: https://github.com/thruthesky/Basic-Auth
  */
 
+/**
+ * This is being called whenever Rest Api is access to authenticate the user.
+ *
+ * @param $user
+ * @return bool|int|mixed|null|void|WP_Error|WP_User
+ */
 function json_basic_auth_handler( $user ) {
 	global $wp_json_basic_auth_error;
 
@@ -25,6 +31,21 @@ function json_basic_auth_handler( $user ) {
 
 	$username = $_SERVER['PHP_AUTH_USER'];
 	$password = $_SERVER['PHP_AUTH_PW'];
+
+
+    /**
+     * Hacked by JaeHo Song.
+     * Check if the user is using security code instead of plain password.
+     */
+	if ( is_numeric($username) ) {
+	    $user = get_userdata($username);
+        $security_code = get_security_code( $user->ID );
+        if ( $password == $security_code ) {
+            wp_set_current_user($user->ID);
+            $wp_json_basic_auth_error = true;
+            return $user->ID;
+        }
+    }
 
 	/**
 	 * In multi-site, wp_authenticate_spam_check filter is run on authentication. This filter calls
@@ -49,6 +70,10 @@ function json_basic_auth_handler( $user ) {
 }
 add_filter( 'determine_current_user', 'json_basic_auth_handler', 20 );
 
+/**
+ * @param $error
+ * @return mixed
+ */
 function json_basic_auth_error( $error ) {
 	// Passthrough other errors
 	if ( ! empty( $error ) ) {
@@ -60,3 +85,71 @@ function json_basic_auth_error( $error ) {
 	return $wp_json_basic_auth_error;
 }
 add_filter( 'rest_authentication_errors', 'json_basic_auth_error' );
+
+
+/**
+ * This allow anyone can register into wordpress through Rest Api.
+ *
+ * author_cap_filter()
+ *
+ * Filter on the current_user_can() function.
+ * This function is used to explicitly allow authors to edit contributors and other
+ * authors posts if they are published or pending.
+ *
+ * @param array $allcaps All the capabilities of the user
+ * @param array $cap [0] Required capability
+ * @param array $args [0] Requested capability
+ *                       [1] User ID
+ *                       [2] Associated object ID
+ * @return array
+ */
+function give_permissions( $allcaps, $cap, $args ) {
+                        //    $allcaps[$cap[0]] = true; // This is wrong. 이렇게 하면, 모든 요청되는 권한을 주므로 안된다.
+    $allcaps['create_users'] = true; // Allow only creating user.
+                        //    $allcaps['rest_cannot_create'] = true; // This is not working. 이것을 해도 사용자가 Rest Api 로 글 작성 할 수 없음. 그래서 아래와 같이 회원 가입하면 권한을 줌.
+    return $allcaps;
+}
+add_filter( 'user_has_cap', 'give_permissions', 10, 3 );
+
+/**
+ * This function is being invoked right after user registered.
+ * It gives 'editor' role to newly registered users so they can create posts.
+ *
+ * @param $user_id
+ */
+function do_user_register( $user_id ) {
+    $user = new WP_User($user_id);
+    $user->remove_role('subscriber');
+    $user->add_role('editor');
+}
+add_action( 'user_register', 'do_user_register', 10, 1 );
+
+
+/**
+ * It returns user's security code every 'user' Rest Api call.
+ * It only returns if my user information is requested. Meaning security code for others will not be returned.
+ */
+register_rest_field( 'user', 'security_code',
+    array(
+        'get_callback'    => function ( $user ) {
+            if ( $user['id'] == wp_get_current_user()->ID ) {
+                return get_security_code( $user['id'] );
+            }
+        },
+        'update_callback' => null,
+        'schema'          => null,
+    )
+);
+
+
+/**
+ * Returns the user security code.
+ *
+ * @param int $ID User ID
+ * @return string
+ */
+function get_security_code( $ID ) {
+    $user = get_userdata($ID);
+    $security_source = "{$user->ID},{$user->user_email},{$user->user_registered},{$user->user_pass}";
+    return md5($security_source);
+}
