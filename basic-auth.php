@@ -157,20 +157,6 @@ register_rest_field( 'user', 'security_code',
         'schema'          => null,
     )
 );
-//register_rest_field( 'user', 'whatever',
-//    array(
-//        'get_callback'    => function ( $user ) {
-//            if ( $user['id'] == wp_get_current_user()->ID || $user['id'] == get_last_user_ID() ) {
-//                $u = get_userdata($user['id']);
-//                return $u->name;
-//            }
-//        },
-//        'update_callback' => null,
-//        'schema'          => null,
-//    )
-//);
-
-
 
 /**
  * Returns the user security code.
