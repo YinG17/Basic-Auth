@@ -8,6 +8,14 @@
  * Plugin URI: https://github.com/thruthesky/Basic-Auth
  */
 
+include_once 'domain.php';
+
+define('ERROR_LOGIN_FIRST', 'login_first');
+
+function error( $code, $message ) {
+
+    return new WP_Error( $code, $message, array( 'status' => 400 ) );
+}
 /**
  * This is being called whenever Rest Api is access to authenticate the user.
  *
@@ -191,7 +199,7 @@ function get_last_user_ID() {
  * Returns login user's data.
  */
 add_action( 'rest_api_init', function () {
-    register_rest_route( 'custom/api', '/profile', array(
+    register_rest_route( 'custom/v1', '/profile', array(
         'methods' => 'GET',
         'callback' => function() {
 
@@ -215,5 +223,17 @@ add_action( 'rest_api_init', function () {
                 return null;
             }
         },
-    ) );
+    ));
+
+    register_rest_route( 'custom/v1', '/my-sites', array(
+        'methods' => 'GET',
+        'callback' => function() {
+
+            if ( ! is_user_logged_in() ) {
+                return error(ERROR_LOGIN_FIRST, 'login first');
+            }
+            $user = wp_get_current_user();
+            return mySites( $user->ID );
+        },
+    ));
 } );
